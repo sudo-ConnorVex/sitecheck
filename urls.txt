@@ -1,0 +1,4 @@
+# sample URL list
+https://example.com
+https://www.rust-lang.org
+https://this-domain-does-not-exist-xyz.invalid
