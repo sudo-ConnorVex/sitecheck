@@ -1,4 +1,5 @@
 use clap::Parser;
+use futures::stream::{self, StreamExt};
 use sitecheck::checker::{check_url, parse_urls_from_content, CheckResult, Status};
 use sitecheck::cli::Cli;
 use sitecheck::output;
@@ -20,8 +21,11 @@ async fn run_once(cli: &Cli, urls: &[String]) -> Result<bool, Box<dyn std::error
         .user_agent("sitecheck/0.1")
         .build()?;
 
-    let futures = urls.iter().map(|u| check_url(&client, u, cli.retries));
-    let results: Vec<CheckResult> = futures::future::join_all(futures).await;
+    let results: Vec<CheckResult> = stream::iter(urls.iter())
+        .map(|u| check_url(&client, u, cli.retries))
+        .buffer_unordered(cli.concurrency)
+        .collect()
+        .await;
 
     if cli.json {
         output::print_json(&results)?;
@@ -63,7 +67,8 @@ async fn main() -> ExitCode {
             return ExitCode::from(2);
         }
         loop {
-            println!("\n=== check at unix:{} ===\n", unix_now());
+            // In JSON mode, header goes to stderr to keep stdout clean
+            eprintln!("\n=== check at unix:{} ===\n", unix_now());
             if let Err(e) = run_once(&cli, &urls).await {
                 eprintln!("error: {e}");
             }

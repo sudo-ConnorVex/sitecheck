@@ -5,6 +5,9 @@ fn valid_http_and_https() {
     assert!(is_valid_url("http://example.com"));
     assert!(is_valid_url("https://example.com"));
     assert!(is_valid_url("https://sub.example.com/path?q=1"));
+    assert!(is_valid_url("http://localhost:3000"));
+    assert!(is_valid_url("http://192.168.1.10"));
+    assert!(is_valid_url("http://127.0.0.1"));
 }
 
 #[test]
@@ -13,7 +16,6 @@ fn invalid_urls() {
     assert!(!is_valid_url("example.com"));
     assert!(!is_valid_url("ftp://example.com"));
     assert!(!is_valid_url("https://"));
-    assert!(!is_valid_url("http://localhost"));
 }
 
 #[test]

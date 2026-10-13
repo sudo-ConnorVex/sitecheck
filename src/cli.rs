@@ -24,6 +24,10 @@ pub struct Cli {
     #[arg(long, default_value_t = 0)]
     pub retries: u32,
 
+    /// Maximum number of concurrent requests
+    #[arg(long, default_value_t = 20)]
+    pub concurrency: usize,
+
     /// Machine-readable JSON output
     #[arg(long, default_value_t = false)]
     pub json: bool,

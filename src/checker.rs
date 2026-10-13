@@ -1,5 +1,10 @@
 use serde::Serialize;
-use std::time::{Duration, Instant};
+// use serde_json::to_string;
+use std::{
+    error::Error,
+    time::{Duration, Instant},
+};
+use url::Url;
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -19,18 +24,10 @@ pub struct CheckResult {
 
 /// Basic URL validation. Only http:// and https:// are accepted.
 pub fn is_valid_url(url: &str) -> bool {
-    let trimmed = url.trim();
-    if trimmed.is_empty() {
-        return false;
+    match Url::parse(url.trim()) {
+        Ok(parsed) => matches!(parsed.scheme(), "http" | "https"),
+        Err(_) => false,
     }
-    if !(trimmed.starts_with("http://") || trimmed.starts_with("https://")) {
-        return false;
-    }
-    // Must have something after the scheme
-    let rest = trimmed
-        .trim_start_matches("https://")
-        .trim_start_matches("http://");
-    !rest.is_empty() && rest.contains('.')
 }
 
 /// Categorize a reqwest error into a short readable label.
@@ -40,8 +37,18 @@ fn classify_error(e: &reqwest::Error) -> String {
     }
     let msg = e.to_string().to_lowercase();
     if e.is_connect() {
-        if msg.contains("dns") || msg.contains("resolve") || msg.contains("name or service") {
-            return "dns".to_string();
+        let mut source: Option<&(dyn Error + 'static)> = e.source();
+        while let Some(err) = source {
+            let msg = err.to_string().to_lowercase();
+            if msg.contains("dns")
+                || msg.contains("resolve")
+                || msg.contains("name or service")
+                || msg.contains("nodename")
+                || msg.contains("no such host")
+            {
+                return "dns".to_string();
+            }
+            source = err.source();
         }
         return "connection".to_string();
     }
