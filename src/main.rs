@@ -5,6 +5,7 @@ use sitecheck::cli::Cli;
 use sitecheck::output;
 use std::process::ExitCode;
 use std::time::Duration;
+use std::collections::HashSet;
 
 fn collect_urls(cli: &Cli) -> Result<Vec<String>, std::io::Error> {
     let mut urls = cli.urls.clone();
@@ -12,15 +13,22 @@ fn collect_urls(cli: &Cli) -> Result<Vec<String>, std::io::Error> {
         let content = std::fs::read_to_string(path)?;
         urls.extend(parse_urls_from_content(&content));
     }
-    Ok(urls)
+    
+    // Deduplicate while preserving order
+    let mut seen = HashSet::new();
+    let unique: Vec<String> = urls
+        .into_iter()
+        .filter(|u| seen.insert(u.clone()))
+        .collect();
+
+    Ok(unique)
 }
 
-async fn run_once(cli: &Cli, urls: &[String]) -> Result<bool, Box<dyn std::error::Error>> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(cli.timeout))
-        .user_agent("sitecheck/0.1")
-        .build()?;
-
+async fn run_once(
+    cli: &Cli,
+    urls: &[String],
+    client: &reqwest::Client
+) -> Result<bool, Box<dyn std::error::Error>> {
     let results: Vec<CheckResult> = stream::iter(urls.iter())
         .map(|u| check_url(&client, u, cli.retries))
         .buffer_unordered(cli.concurrency)
@@ -61,6 +69,17 @@ async fn main() -> ExitCode {
         }
     };
 
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(cli.timeout))
+        .user_agent("sitecheck/0.1")
+        .build() {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("error: failed to build HTTP client: {e}");
+                return ExitCode::from(2)
+            }
+        };
+
     if let Some(interval) = cli.watch {
         if interval == 0 {
             eprintln!("error: --watch must be greater than 0");
@@ -69,14 +88,14 @@ async fn main() -> ExitCode {
         loop {
             // In JSON mode, header goes to stderr to keep stdout clean
             eprintln!("\n=== check at unix:{} ===\n", unix_now());
-            if let Err(e) = run_once(&cli, &urls).await {
+            if let Err(e) = run_once(&cli, &urls, &client).await {
                 eprintln!("error: {e}");
             }
             tokio::time::sleep(Duration::from_secs(interval)).await;
         }
     }
 
-    match run_once(&cli, &urls).await {
+    match run_once(&cli, &urls, &client).await {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::from(1),
         Err(e) => {
