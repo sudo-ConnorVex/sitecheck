@@ -40,11 +40,11 @@ cargo build --release
 
 ## Exit codes
 
-| Code | Meaning                          |
-|------|----------------------------------|
-| 0    | All URLs are healthy             |
-| 1    | At least one URL failed          |
-| 2    | Invalid input or runtime error   |
+| Code | Meaning                        |
+|------|--------------------------------|
+| 0    | All URLs are healthy           |
+| 1    | At least one URL failed        |
+| 2    | Invalid input or runtime error |
 
 ## Project layout
 
