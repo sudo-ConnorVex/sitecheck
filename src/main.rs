@@ -3,9 +3,9 @@ use futures::stream::{self, StreamExt};
 use sitecheck::checker::{check_url, parse_urls_from_content, CheckResult, Status};
 use sitecheck::cli::Cli;
 use sitecheck::output;
+use std::collections::HashSet;
 use std::process::ExitCode;
 use std::time::Duration;
-use std::collections::HashSet;
 
 fn collect_urls(cli: &Cli) -> Result<Vec<String>, std::io::Error> {
     let mut urls = cli.urls.clone();
@@ -13,7 +13,7 @@ fn collect_urls(cli: &Cli) -> Result<Vec<String>, std::io::Error> {
         let content = std::fs::read_to_string(path)?;
         urls.extend(parse_urls_from_content(&content));
     }
-    
+
     // Deduplicate while preserving order
     let mut seen = HashSet::new();
     let unique: Vec<String> = urls
@@ -27,11 +27,11 @@ fn collect_urls(cli: &Cli) -> Result<Vec<String>, std::io::Error> {
 async fn run_once(
     cli: &Cli,
     urls: &[String],
-    client: &reqwest::Client
+    client: &reqwest::Client,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     let results: Vec<CheckResult> = stream::iter(urls.iter())
-        .map(|u| check_url(&client, u, cli.retries))
-        .buffer_unordered(cli.concurrency)
+        .map(|u| check_url(client, u, cli.retries))
+        .buffered(cli.concurrency)
         .collect()
         .await;
 
@@ -72,13 +72,14 @@ async fn main() -> ExitCode {
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(cli.timeout))
         .user_agent("sitecheck/0.1")
-        .build() {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("error: failed to build HTTP client: {e}");
-                return ExitCode::from(2)
-            }
-        };
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: failed to build HTTP client: {e}");
+            return ExitCode::from(2);
+        }
+    };
 
     if let Some(interval) = cli.watch {
         if interval == 0 {

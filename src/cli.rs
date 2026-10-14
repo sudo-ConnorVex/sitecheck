@@ -1,6 +1,20 @@
 use clap::Parser;
 use std::path::PathBuf;
 
+// Checking the range of the concurrency option number
+fn concurrency_in_range(s: &str) -> Result<usize, String> {
+    let value: usize = s
+        .parse()
+        .map_err(|_| format!("`{s}` is not a valid number"))?;
+    if (1..=200).contains(&value) {
+        Ok(value)
+    } else {
+        Err(format!(
+            "concurrency must be between 1 and 200, got {value}"
+        ))
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(
     name = "sitecheck",
@@ -24,8 +38,8 @@ pub struct Cli {
     #[arg(long, default_value_t = 0)]
     pub retries: u32,
 
-    /// Maximum number of concurrent requests
-    #[arg(long, default_value_t = 20)]
+    /// Maximum number of concurrent requests (1 - 200)
+    #[arg(long, default_value_t = 20, value_parser = concurrency_in_range)]
     pub concurrency: usize,
 
     /// Machine-readable JSON output

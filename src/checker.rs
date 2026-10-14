@@ -74,6 +74,8 @@ pub async fn check_url(client: &reqwest::Client, url: &str, retries: u32) -> Che
 
     let attempts = retries.saturating_add(1);
     let mut last_err: Option<String> = None;
+    let mut last_code: Option<u16> = None;
+    let mut last_ms: Option<u128> = None;
 
     for attempt in 0..attempts {
         let start = Instant::now();
@@ -81,18 +83,31 @@ pub async fn check_url(client: &reqwest::Client, url: &str, retries: u32) -> Che
             Ok(resp) => {
                 let elapsed = start.elapsed().as_millis();
                 let code = resp.status().as_u16();
-                let ok = resp.status().is_success() || resp.status().is_redirection();
-                return CheckResult {
-                    url: url.to_string(),
-                    status: if ok { Status::Ok } else { Status::Fail },
-                    http_code: Some(code),
-                    response_ms: Some(elapsed),
-                    error: if ok {
-                        None
-                    } else {
-                        Some(format!("HTTP {}", code))
-                    },
-                };
+                let is_ok = resp.status().is_success() || resp.status().is_redirection();
+
+                if is_ok {
+                    return CheckResult {
+                        url: url.to_string(),
+                        status: Status::Ok,
+                        http_code: Some(code),
+                        response_ms: Some(elapsed),
+                        error: None,
+                    };
+                }
+
+                // HTTP error response (4xx or 5xx)
+                last_err = Some(format!("HTTP {}", code));
+                last_code = Some(code);
+                last_ms = Some(elapsed);
+
+                // Retry only on 5xx server errors; 4xx is a client issue
+                if !resp.status().is_server_error() {
+                    break;
+                }
+
+                if attempt + 1 < attempts {
+                    tokio::time::sleep(Duration::from_millis(300)).await;
+                }
             }
             Err(e) => {
                 last_err = Some(classify_error(&e));
@@ -106,8 +121,8 @@ pub async fn check_url(client: &reqwest::Client, url: &str, retries: u32) -> Che
     CheckResult {
         url: url.to_string(),
         status: Status::Fail,
-        http_code: None,
-        response_ms: None,
+        http_code: last_code,
+        response_ms: last_ms,
         error: last_err,
     }
 }
